@@ -1,4 +1,4 @@
-﻿# setup.ps1
+# setup.ps1
 # Run once when setting up a new project on Windows
 # Requirement:
 #   - GitHub repo đã tạo và remote đã kết nối (git remote set-url origin ...)
@@ -178,8 +178,6 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "  Waiting for Monitoring frontend..."
-
 Write-Host "OK: Services are ready" -ForegroundColor Green
 
 # =========================================================
@@ -237,8 +235,6 @@ Write-Host "       API /predict  → http://localhost:8000/docs" -ForegroundColo
 Write-Host "       Grafana       → http://localhost:3000  (admin / giá trị grafanaPassword)" -ForegroundColor Gray
 Write-Host "       MLflow        → http://localhost:5000" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  3. Tạo snapshot đầu tiên:" -ForegroundColor White
-Write-Host "       Vào http://localhost:3001 → tab Progress → nhấn 'Tạo Snapshot'" -ForegroundColor Gray
-Write-Host "       → tạo snapshot_v1.json + dataset_v1.json + test_v1.json trên MinIO registry" -ForegroundColor Gray
+Write-Host "  3. Upload ảnh + gắn nhãn → tab Train → nhấn Train để trigger CI/CD" -ForegroundColor White
 Write-Host ""
-Write-Host "  4. Update dataset_version.txt and push to trigger CI/CD:" -F
+Write-Host "  CI/CD sẽ tự động train sau khi push." -ForegroundColor Gray

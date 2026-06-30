@@ -87,15 +87,13 @@ docker build -f labeling/backend/Dockerfile -t labeling-backend:latest .
 echo "Building labeling-frontend:latest..."
 docker build -f labeling/frontend/Dockerfile -t labeling-frontend:latest .
 
-
 echo "OK: Images built into Minikube daemon"
 
 # =========================================================
 # Step 4: Deploy stack via Helm
 # =========================================================
 #
-# Deploys MinIO, MLflow, Prometheus, Grafana, Labeling Tool,
-# Monitoring Dashboard.
+# Deploys MinIO, MLflow, Prometheus, Grafana, Labeling Tool.
 # Trainer/API are disabled until dataset_version.txt has content.
 #
 # =========================================================
@@ -143,7 +141,6 @@ kubectl wait pod -n mlops -l app=labeling-postgres --for=condition=Ready --timeo
 
 echo "  Waiting for Labeling backend..."
 kubectl rollout status deployment/labeling-backend -n mlops --timeout=300s
-
 
 echo "OK: Services are ready"
 
@@ -199,15 +196,6 @@ echo "       API /predict  → http://localhost:8000/docs"
 echo "       Grafana       → http://localhost:3000  (admin / giá trị grafanaPassword)"
 echo "       MLflow        → http://localhost:5000"
 echo ""
-echo "  3. Tạo snapshot đầu tiên:"
-echo "       Vào http://localhost:3001 → tab Progress → nhấn 'Tạo Snapshot'"
-echo "       → tạo snapshot_v1.json + dataset_v1.json + test_v1.json trên MinIO registry"
-echo ""
-echo "  4. Update dataset_version.txt và push để trigger CI/CD:"
-echo "       echo 'v1' > dataset_version.txt"
-echo "       git add dataset_version.txt"
-echo "       git commit -m 'dataset v1'"
-echo "       git tag v1.0"
-echo "       git push origin $branch --tags"
+echo "  3. Upload ảnh + gắn nhãn → tab Train → nhấn Train để trigger CI/CD"
 echo ""
 echo "  CI/CD sẽ tự động train sau khi push."

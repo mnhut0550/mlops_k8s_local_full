@@ -94,7 +94,18 @@ docker version && minikube version && kubectl version --client && helm version
 
 ---
 
-## Bước 3 — Cấu hình credentials
+## Bước 3 — Tạo GitHub repo và kết nối
+
+1. Vào github.com → **New repository** → Private → **Không check** "Add README"
+2. Kết nối:
+```bash
+git remote remove origin
+git remote add origin https://github.com/<you>/my_project.git
+```
+
+---
+
+## Bước 4 — Cấu hình credentials
 
 Copy `mlops_chart/values.example.yaml` thành `mlops_chart/values.yaml` rồi điền thông tin thật:
 
@@ -128,7 +139,7 @@ labeling:
 
 ---
 
-## Bước 4 — Tạo `src/params.yaml`
+## Bước 5 — Tạo `src/params.yaml`
 
 ```bash
 # Classification
@@ -156,17 +167,6 @@ Chỉnh `task_name`, `models`, `n_trials`, `max_num_epochs` theo nhu cầu.
 > | `api.image` | `values.yaml` | `"mlops-local-api:latest"` |
 >
 > Nếu đổi `PROJECT` thì cập nhật image names tương ứng trong `values.yaml` và workflow.
-
----
-
-## Bước 5 — Tạo GitHub repo và kết nối
-
-1. Vào github.com → **New repository** → Private → **Không check** "Add README"
-2. Kết nối:
-```bash
-git remote remove origin
-git remote add origin https://github.com/<you>/my_project.git
-```
 
 ---
 
