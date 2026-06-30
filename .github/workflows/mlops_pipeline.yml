@@ -1,0 +1,278 @@
+# .github/workflows/mlops_pipeline.yml
+# Trigger: push code lên main/master → tự động train + deploy
+# Yêu cầu: minikube đang chạy, helm đã install stack, self-hosted runner
+
+name: MLOps Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'src/params.yaml'           # train lại khi đổi config
+      - 'serving/**'      # build lại khi đổi code trong app.py
+      - 'dataset_version.txt'  # train lại khi đổi dataset version
+      - 'docker/**'       # build lại khi đổi Dockerfile
+      - 'requirements/**' # build lại khi đổi dependencies
+  workflow_dispatch:
+
+jobs:
+  train-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 2
+
+      # ── Kiểm tra có data chưa ────────────────────────────────────────────
+      # Lý do: v0.0 chưa có snapshot → dataset_version.txt rỗng → skip toàn bộ pipeline
+
+      - name: Kiểm tra dataset_version.txt (Windows)
+        id: check_data_win
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $version = ""
+          if (Test-Path "dataset_version.txt") {
+            $version = (Get-Content "dataset_version.txt").Trim()
+          }
+          if ($version -ne "") {
+            "has_data=true" >> $env:GITHUB_OUTPUT
+            "dataset_version=$version" >> $env:GITHUB_OUTPUT
+          } else {
+            "has_data=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Kiểm tra dataset_version.txt (Linux/macOS)
+        id: check_data_unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          version=""
+          if [ -f "dataset_version.txt" ]; then
+            version=$(cat dataset_version.txt | tr -d '[:space:]')
+          fi
+          if [ -n "$version" ]; then
+            echo "has_data=true" >> $GITHUB_OUTPUT
+            echo "dataset_version=$version" >> $GITHUB_OUTPUT
+          else
+            echo "has_data=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Kiểm tra có cần build image không ───────────────────────────────
+      # Lý do: chỉ build khi code/Dockerfile/requirements thay đổi
+      # Không build khi chỉ đổi src/params.yaml — tiết kiệm thời gian
+      # Windows
+      - name: Kiểm tra có cần build image không (Windows)
+        id: check_build_win
+        if: runner.os == 'Windows' && steps.check_data_win.outputs.has_data == 'true'
+        shell: powershell
+        run: |
+          $needRebuildBase = $false
+          $needRebuildApi = $false
+          $needRebuildTrainer = $false
+
+          $changedFiles = git diff --name-only HEAD~1 HEAD
+
+          foreach ($file in $changedFiles) {
+
+            if ($file -match '^docker/Dockerfile\.base$|^requirements/base\.txt$') {
+              $needRebuildBase = $true
+            }
+
+            if ($file -match '^docker/Dockerfile\.api$|^requirements/api\.txt$|^serving/app\.py$') {
+              $needRebuildApi = $true
+            }
+
+            if ($file -match '^docker/Dockerfile\.trainer$|^requirements/trainer\.txt$|^src/train\.py$|^src/cls_trainer\.py$|^src/dct_trainer\.py$|^src/registry_loader\.py$|^src/embedding_utils\.py$|^src/config/load\.py$') {
+              $needRebuildTrainer = $true
+            }
+
+          }
+
+          # base đổi -> rebuild các image phụ thuộc
+          if ($needRebuildBase) {
+            $needRebuildApi = $true
+            $needRebuildTrainer = $true
+          }
+
+          "need_rebuild_base=$($needRebuildBase.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "need_rebuild_api=$($needRebuildApi.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "need_rebuild_trainer=$($needRebuildTrainer.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+      # Linux/macOS
+      - name: Check cần rebuild image không (Linux/macOS)
+        id: check_build_unix
+        if: runner.os != 'Windows' && steps.check_data_unix.outputs.has_data == 'true'
+        shell: bash
+        run: |
+          needRebuildBase=false
+          needRebuildApi=false
+          needRebuildTrainer=false
+
+          changed_files=$(git diff --name-only HEAD~1 HEAD)
+
+          for file in $changed_files; do
+
+            if echo "$file" | grep -qE '^docker/Dockerfile\.base$|^requirements/base\.txt$'; then
+              needRebuildBase=true
+            fi
+
+            if echo "$file" | grep -qE '^docker/Dockerfile\.api$|^requirements/api\.txt$|^serving/app\.py$'; then
+              needRebuildApi=true
+            fi
+
+            if echo "$file" | grep -qE '^docker/Dockerfile\.trainer$|^requirements/trainer\.txt$|^src/train\.py$|^src/cls_trainer\.py$|^src/dct_trainer\.py$|^src/registry_loader\.py$|^src/embedding_utils\.py$|^src/config/load\.py$'; then
+              needRebuildTrainer=true
+            fi
+
+          done
+
+          # base đổi -> rebuild luôn image phụ thuộc
+          if [ "$needRebuildBase" = true ]; then
+            needRebuildApi=true
+            needRebuildTrainer=true
+          fi
+
+          echo "need_rebuild_base=$needRebuildBase" >> $GITHUB_OUTPUT
+          echo "need_rebuild_api=$needRebuildApi" >> $GITHUB_OUTPUT
+          echo "need_rebuild_trainer=$needRebuildTrainer" >> $GITHUB_OUTPUT
+
+      # ── Build Docker images ──────────────────────────────────────────────
+      # Lý do: chỉ build khi cần — tránh build thừa
+      # Tên image phải trùng PROJECT trong setup.sh / setup.ps1
+      - name: Rebuild base image
+        if: steps.check_build_win.outputs.need_rebuild_base == 'true' || steps.check_build_unix.outputs.need_rebuild_base == 'true'
+        run: |
+          docker build -f docker/Dockerfile.base -t mlops-local-base:latest .
+          minikube image load mlops-local-base:latest
+
+      - name: Build API image
+        if: steps.check_build_win.outputs.need_rebuild_api == 'true' || steps.check_build_unix.outputs.need_rebuild_api == 'true'
+        run: |
+          docker build -f docker/Dockerfile.api --build-arg BASE_IMAGE=mlops-local-base:latest -t mlops-local-api:latest .
+          minikube image load mlops-local-api:latest
+
+      - name: Build trainer image
+        if: steps.check_build_win.outputs.need_rebuild_trainer == 'true' || steps.check_build_unix.outputs.need_rebuild_trainer == 'true'
+        run: |
+          docker build -f docker/Dockerfile.trainer --build-arg BASE_IMAGE=mlops-local-base:latest -t mlops-local-trainer:latest .
+          minikube image load mlops-local-trainer:latest
+          
+
+      # ── Deploy trainer + api qua Helm ────────────────────────────────────
+      # Lý do: Job là immutable — phải xóa rồi tạo mới
+
+      - name: Tạo ConfigMap model-code từ src/models/
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: |
+          kubectl create configmap model-code --from-file=src/models/ -n mlops --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Tạo ConfigMap model-params
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: |
+          kubectl create configmap model-params --from-file=params.yaml=src/params.yaml -n mlops --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Tạo ConfigMap dataset-version (Windows)
+        if: steps.check_data_win.outputs.has_data == 'true' && runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $v = "${{ steps.check_data_win.outputs.dataset_version }}"
+          kubectl create configmap dataset-version --from-literal=DATASET_VERSION=$v -n mlops --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Tạo ConfigMap dataset-version (Linux/macOS)
+        if: steps.check_data_unix.outputs.has_data == 'true' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          kubectl create configmap dataset-version \
+            --from-literal=DATASET_VERSION=${{ steps.check_data_unix.outputs.dataset_version }} \
+            -n mlops --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Xóa trainer Job cũ
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: kubectl delete job trainer -n mlops --ignore-not-found
+
+      - name: Helm upgrade — bật trainer + api
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: |
+          helm upgrade mlops mlops_chart/ --namespace mlops --set trainer.enabled=true --set api.enabled=true
+
+      # ── Đợi trainer xong ────────────────────────────────────────────────
+      - name: Wait trainer complete (Linux/macOS)
+        if: steps.check_data_unix.outputs.has_data == 'true' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          until kubectl get job trainer -n mlops >/dev/null 2>&1; do
+            echo "Waiting trainer job create..."
+            sleep 30
+          done
+
+          while true; do
+            SUCCEEDED=$(kubectl get job trainer -n mlops -o jsonpath='{.status.succeeded}')
+            FAILED=$(kubectl get job trainer -n mlops -o jsonpath='{.status.failed}')
+
+            SUCCEEDED=${SUCCEEDED:-0}
+            FAILED=${FAILED:-0}
+
+            echo "Trainer succeeded=$SUCCEEDED failed=$FAILED"
+
+            if [ "$SUCCEEDED" -ge 1 ]; then
+              echo "Trainer done!"
+              break
+            fi
+
+            if [ "$FAILED" -ge 1 ]; then
+              echo "Trainer failed!"
+              kubectl logs job/trainer -n mlops --tail=100
+              exit 1
+            fi
+
+            sleep 90
+          done
+
+      - name: Wait trainer complete (Windows)
+        if: steps.check_data_win.outputs.has_data == 'true' && runner.os == 'Windows'
+        shell: powershell
+        run: |
+          while (-not (kubectl get job trainer -n mlops 2>$null)) {
+            Write-Host "Waiting trainer job create..."
+            Start-Sleep -Seconds 30
+          }
+
+          while ($true) {
+            $succeeded = kubectl get job trainer -n mlops -o jsonpath='{.status.succeeded}'
+            $failed    = kubectl get job trainer -n mlops -o jsonpath='{.status.failed}'
+
+            if (!$succeeded) { $succeeded = 0 }
+            if (!$failed) { $failed = 0 }
+
+            Write-Host "Trainer succeeded=$succeeded failed=$failed"
+
+            if ([int]$succeeded -ge 1) {
+              Write-Host "Trainer done!"
+              break
+            }
+
+            if ([int]$failed -ge 1) {
+              Write-Host "Trainer failed!"
+              kubectl logs job/trainer -n mlops --tail=100
+              exit 1
+            }
+
+            Start-Sleep -Seconds 90
+          }
+
+      # ── Restart API ──────────────────────────────────────────────────────
+      # Lý do: force Pod load lại model champion mới từ MLflow
+      - name: Restart API với model mới
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: kubectl rollout restart deployment/api -n mlops
+
+      # ── Health check API ─────────────────────────────────────────────────
+      # Lý do: đảm bảo API load model thành công trước khi pipeline kết thúc
+      # Thay toàn bộ 2 step "Đợi API healthy" bằng:
+      - name: Đợi API rollout xong
+        if: steps.check_data_win.outputs.has_data == 'true' || steps.check_data_unix.outputs.has_data == 'true'
+        run: kubectl rollout status deployment/api -n mlops --timeout=600s

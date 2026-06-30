@@ -1,0 +1,12 @@
+# k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlops-config
+  namespace: {{ .Values.namespace}}
+data:
+  MLFLOW_TRACKING_URI: "http://mlflow-service:{{ .Values.mlflow.port }}"
+  MLFLOW_S3_ENDPOINT_URL: {{ .Values.configmap.mlflowS3EndpointUrl}}
+  MODEL_NAME: {{ .Values.configmap.modelName}}
+  MODEL_VERSION: {{ .Values.configmap.modelVersion}}
+  GIT_PYTHON_REFRESH: {{ .Values.configmap.gitPythonRefresh}}

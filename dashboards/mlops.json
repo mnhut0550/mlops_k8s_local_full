@@ -1,0 +1,144 @@
+{
+  "title": "MLOps — Image Classifier",
+  "uid": "mlops-classifier",
+  "timezone": "browser",
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Requests",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(predict_requests_total)",
+        "legendFormat": "Total"
+      }],
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "color": "green", "value": null }
+        ]}
+      }}
+    },
+    {
+      "id": 2,
+      "title": "Success Rate",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(predict_requests_total{status='success'}) / sum(predict_requests_total) * 100",
+        "legendFormat": "Success %"
+      }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": {
+        "unit": "percent",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "color": "red",    "value": null },
+          { "color": "yellow", "value": 80 },
+          { "color": "green",  "value": 95 }
+        ]}
+      }}
+    },
+    {
+      "id": 3,
+      "title": "Avg Latency (ms)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "rate(predict_latency_seconds_sum[1m]) / rate(predict_latency_seconds_count[1m]) * 1000",
+        "legendFormat": "Avg Latency"
+      }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": {
+        "unit": "ms",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "color": "green",  "value": null },
+          { "color": "yellow", "value": 500 },
+          { "color": "red",    "value": 1000 }
+        ]}
+      }}
+    },
+    {
+      "id": 4,
+      "title": "Error Count",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(predict_requests_total{status='error'})",
+        "legendFormat": "Errors"
+      }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": {
+        "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          { "color": "green", "value": null },
+          { "color": "red",   "value": 1 }
+        ]}
+      }}
+    },
+    {
+      "id": 5,
+      "title": "Request Rate (req/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(predict_requests_total{status='success'}[1m]) * 60",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "rate(predict_requests_total{status='error'}[1m]) * 60",
+          "legendFormat": "Error"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqpm" }}
+    },
+    {
+      "id": 6,
+      "title": "Latency Distribution (p50/p95/p99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(predict_latency_seconds_bucket[1m])) * 1000",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(predict_latency_seconds_bucket[1m])) * 1000",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(predict_latency_seconds_bucket[1m])) * 1000",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }}
+    },
+    {
+      "id": 7,
+      "title": "Prediction Distribution by Class",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "prediction_class_total",
+        "legendFormat": "{{class_name}}"
+      }],
+      "options": { "pieType": "pie", "displayLabels": ["name", "percent"] }
+    },
+    {
+      "id": 8,
+      "title": "Class Predict Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "rate(prediction_class_total[1m]) * 60",
+        "legendFormat": "{{class_name}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "reqpm" }}
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}

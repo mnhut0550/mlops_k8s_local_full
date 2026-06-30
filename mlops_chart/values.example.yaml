@@ -1,0 +1,67 @@
+# mlops_local_k8s/values.yaml
+# Copy file này thành values.yaml rồi điền thông tin thật
+# cp values.example.yaml mlops_local_k8s/values.yaml
+
+namespace: mlops
+
+secret:
+  minioRootUser: "your-minio-user"        # tối thiểu 3 ký tự
+  minioRootPassword: "your-minio-password" # tối thiểu 8 ký tự
+  awsAccessKeyId: "your-minio-user"        # phải trùng minioRootUser
+  awsSecretAccessKey: "your-minio-password" # phải trùng minioRootPassword
+  grafanaPassword: "your-grafana-password"
+  labelingDbPassword: "labeling-db-pass"   # password PostgreSQL của labeling tool
+  githubToken: "ghp_your_token_here"       # GitHub Personal Access Token (repo write)
+
+configmap:
+  mlflowS3EndpointUrl: "http://minio-service:9000"
+  modelName: "ten_bai_toan"          # phải trùng pipeline.task_name trong params.yaml
+  modelVersion: "champion"
+  gitPythonRefresh: "quiet"
+
+minio:
+  image: "minio/minio:latest"
+  storage: "4Gi"
+
+mlflow:
+  image: "ghcr.io/mlflow/mlflow:v2.11.1"
+  storage: "1Gi"
+  port: 5000
+
+api:
+  image: "mlops-local-api:latest"         # phải trùng PROJECT trong setup script
+  replicas: 1
+  port: 8000
+  enabled: false
+
+trainer:
+  image: "mlops-local-trainer:latest"     # phải trùng PROJECT trong setup script
+  enabled: false
+
+prometheus:
+  image: "prom/prometheus:v2.51.0"
+  port: 9090
+
+grafana:
+  image: "grafana/grafana:10.4.0"
+  port: 3000
+
+labeling:
+  enabled: true
+  minioBucket: "raw-images"          # bucket lưu ảnh upload
+  registryBucket: "mlops-registry"   # bucket lưu snapshots/datasets/benchmarks
+  githubRepo: "your-username/your-repo"  # owner/repo để push dataset_version.txt
+  githubBranch: "main"
+
+  postgres:
+    storage: "2Gi"
+
+  backend:
+    image: "labeling-backend:latest"
+    replicas: 1
+    port: 8001
+
+  frontend:
+    image: "labeling-frontend:latest"
+    replicas: 1
+    port: 3000

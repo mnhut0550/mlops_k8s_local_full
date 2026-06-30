@@ -1,0 +1,90 @@
+# k8s/trainer.yaml
+{{- if ((.Values.trainer).enabled) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trainer
+  namespace: {{ .Values.namespace}}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: {{ .Values.trainer.image}}
+          imagePullPolicy: Never
+          env:
+            # ── MLflow ───────────────────────────────────────────────
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MLFLOW_TRACKING_URI
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MLFLOW_S3_ENDPOINT_URL
+            - name: GIT_PYTHON_REFRESH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: GIT_PYTHON_REFRESH
+            # ── MinIO (MLflow artifact store) ────────────────────────
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            # ── MinIO (registry_loader) ──────────────────────────────
+            - name: MINIO_URL
+              value: "http://minio-service:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MINIO_BUCKET
+              value: {{ .Values.labeling.minioBucket }}
+            - name: REGISTRY_BUCKET
+              value: {{ .Values.labeling.registryBucket }}
+            # ── Labeling PostgreSQL (registry_loader) ────────────────
+            - name: LABELING_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: LABELING_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://postgres:$(LABELING_DB_PASSWORD)@labeling-postgres:5432/labeling"
+            # ── Dataset version (từ ConfigMap tạo bởi CI/CD) ─────────
+            - name: DATASET_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: dataset-version
+                  key: DATASET_VERSION
+          args: ["--config", "/app/params.yaml"]
+          volumeMounts:
+            - name: model-code
+              mountPath: /app/src/models   # inject models/ dynamic files
+            - name: model-params
+              mountPath: /app/params.yaml
+              subPath: params.yaml
+      volumes:
+        - name: model-code
+          configMap:
+            name: model-code
+        - name: model-params
+          configMap:
+            name: model-params
+{{- end -}}

@@ -1,0 +1,109 @@
+
+# ── ConfigMap: Grafana datasource ────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: {{ .Values.namespace}}
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service:{{ .Values.prometheus.port }}
+        isDefault: true
+        editable: false
+
+---
+# ── ConfigMap: Grafana dashboard provider ────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: {{ .Values.namespace}}
+data:
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+      - name: MLOps
+        folder: MLOps
+        type: file
+        options:
+          path: /etc/grafana/provisioning/dashboards
+
+---
+# ── ConfigMap: Grafana dashboard JSON ────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-json
+  namespace: {{ .Values.namespace}}
+data:
+  mlops.json: |
+{{ .Files.Get "dashboards/mlops.json" | indent 4 }}
+
+---
+# ── Grafana Deployment ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ .Values.namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image}}
+          ports:
+            - containerPort: {{ .Values.grafana.port }}
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: GRAFANA_PASSWORD
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          volumeMounts:
+          - name: datasource
+            mountPath: /etc/grafana/provisioning/datasources
+          - name: dashboard-provider
+            mountPath: /etc/grafana/provisioning/dashboards/dashboard.yml
+            subPath: dashboard.yml
+          - name: dashboard-json
+            mountPath: /etc/grafana/provisioning/dashboards/mlops.json
+            subPath: mlops.json
+
+      volumes:
+        - name: datasource
+          configMap:
+            name: grafana-datasource
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboard-json
+          configMap:
+            name: grafana-dashboard-json
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: {{ .Values.namespace}}
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+    - port: {{ .Values.grafana.port }}

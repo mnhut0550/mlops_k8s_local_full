@@ -1,0 +1,46 @@
+# params_config_cls.yaml
+# =====================================================================
+# Classification Config
+# =====================================================================
+
+pipeline:
+  model_type: "classification"
+  task_name: "ten_bai_toan"            # Tên mẫu dữ liệu để phân nhóm lịch sử trên MLflow
+
+data:
+  data_dir: "./data"
+  annotation_format: "none"            # Classification không cần annotation file
+  already_split: true
+  val_ratio: 0.2                        # Cố định, không đổi
+  test_ratio: 0.2                       # Có thể chỉnh, thường 0.1-0.2
+  batch_size: 32
+  img_size: 224                        # Classification thường dùng 224
+
+embedding:
+  model: "MobileNetV3Small"            # Pretrained backbone cố định để extract embedding
+                                       # Dùng để lưu emb_train_current.npy → drift detection sau này
+                                       # Chọn: "MobileNetV3Small", "EfficientNetB0", "ResNet18"
+
+optuna_tuning:
+  n_trials: 50                         # Số trial Optuna chạy
+  max_num_epochs: 50                   # Số epoch tối đa mỗi trial
+  storage_db: "sqlite:///optuna_mlops.db"
+  pruner: "median"                     # "median" hoặc "hyperband"
+
+training:
+  optimizer_choices: ["Adam", "SGD", "RMSprop"]
+  lr_min: 1.0e-5
+  lr_max: 1.0e-2
+
+models:
+  - "ResNet18"
+  - "ResNet34"
+  - "ResNet50"
+  - "MobileNetV3Small"
+  - "EfficientNetB0"
+  - "SimpleCNN"
+
+mlflow:
+  experiment_base_name: "generic-vision-pipeline"
+  # registered_model_name bị bỏ — tự động dùng task_name làm tên model trong MLflow
+  # Đặt modelName trong values.yaml trùng với task_name ở trên

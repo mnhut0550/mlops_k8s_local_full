@@ -1,0 +1,31 @@
+# docker/Dockerfile.trainer
+
+ARG BASE_IMAGE=mlops-local-base:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+COPY requirements/trainer.txt trainer.txt
+COPY requirements/base.txt base.txt
+
+RUN pip install \
+    --retries 10 \
+    --timeout 600 \
+    -r trainer.txt
+
+# Stable pipeline files — bake vào image, không cần rebuild khi user thay đổi model
+COPY src/train.py               ./src/train.py
+COPY src/cls_trainer.py         ./src/cls_trainer.py
+COPY src/dct_trainer.py         ./src/dct_trainer.py
+COPY src/registry_loader.py     ./src/registry_loader.py
+COPY src/embedding_utils.py     ./src/embedding_utils.py
+COPY src/models/models.py       ./src/models/models.py
+COPY src/config/                ./src/config/
+
+# Dynamic model files (pretrained.py, custom.py, utils.py)
+# → inject qua ConfigMap lúc runtime (trainer.yaml volumeMount /app/src)
+
+ENV MLFLOW_TRACKING_URI=http://mlflow-service:5000
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "src/train.py", "--config", "/app/params.yaml"]

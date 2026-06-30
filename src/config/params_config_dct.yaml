@@ -1,0 +1,39 @@
+# params.yaml
+# =====================================================================
+# Generic Config - Hệ thống MLOps Tự Động Thích Nghi Cho Mọi Loại Mẫu
+# =====================================================================
+
+pipeline:
+  model_type: "detection"             # Loại bài toán: "classification" hoặc "detection"
+  task_name: "mau_soi_loi_bo_mach"    # Tên mẫu dữ liệu để phân nhóm lịch sử trên MLflow
+
+data:
+  data_dir: "./data"                  # Thư mục gốc chứa dữ liệu của mẫu này
+  annotation_format: "yolo"           # Định dạng nhãn: "none" (cho class), "yolo" hoặc "coco" (cho detect)
+  already_split: true
+  val_ratio: 0.2                       # Cố định, không đổi
+  test_ratio: 0.2                      # Có thể chỉnh, thường 0.1-0.2
+  batch_size: 32                      
+  img_size: 640                       # Kích thước resize ảnh (Detection nên để 640, Class để 224 hoặc 32)
+
+
+optuna_tuning:
+  n_trials: 50
+  max_num_epochs: 50
+  storage_db: "sqlite:///optuna_mlops.db"
+  pruner: "median"
+
+training:
+  optimizer_choices: ["AdamW", "SGD", "Adam"]
+  lr_min: 1.0e-5
+  lr_max: 1.0e-2
+
+models:
+  - "YOLOv8n"
+  - "YOLOv8s"
+  - "YOLOv8m"
+
+mlflow:
+  experiment_base_name: "generic-vision-pipeline"
+  # registered_model_name bị bỏ — tự động dùng task_name làm tên model trong MLflow
+  # Đặt modelName trong values.yaml trùng với task_name ở trên

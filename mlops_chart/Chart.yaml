@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mlops_chart
+description: MLOps stack - MinIO + MLflow + Image Classifier API + Monitoring
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

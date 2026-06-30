@@ -1,0 +1,66 @@
+# k8s/minio.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: {{ .Values.namespace}}
+spec:
+  serviceName: minio-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image:  {{ .Values.minio.image}}
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - containerPort: 9000   # S3 API
+            - containerPort: 9001   # Web UI
+          env:
+            - name: MINIO_ROOT_USER 
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: MINIO_ROOT_USER   #Giá trị được khai báo ở SECRET.yaml
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: MINIO_ROOT_PASSWORD   #Giá trị được khai báo ở SECRET.yaml
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+          readinessProbe:  #Dùng khi khởi động chậm: chờ minio khởi động hoàn tất
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+  volumeClaimTemplates:             # PVC tự động tạo theo StatefulSet
+    - metadata:
+        name: minio-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.minio.storage}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: {{ .Values.namespace}}
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+    - name: console
+      port: 9001

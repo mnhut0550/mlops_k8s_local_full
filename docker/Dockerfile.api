@@ -1,0 +1,28 @@
+# docker/Dockerfile.api
+# Image dùng để chạy FastAPI serving
+# Luôn chạy, lắng nghe request predict
+
+ARG BASE_IMAGE=mlops-local-base:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+COPY requirements/api.txt api.txt
+COPY requirements/base.txt base.txt
+
+RUN pip install \
+    --retries 10 \
+    --timeout 600 \
+    -r api.txt
+
+# Copy serving code
+COPY serving/ ./serving/
+
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+
+# Expose port để docker-compose map ra ngoài
+EXPOSE 8000
+
+# Dùng uvicorn chạy FastAPI
+CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000"]

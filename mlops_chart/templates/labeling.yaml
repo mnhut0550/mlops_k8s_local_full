@@ -1,0 +1,205 @@
+{{- if ((.Values.labeling).enabled) }}
+
+# ──────────────────────────────────────────────
+# PostgreSQL for labeling metadata
+# ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: labeling-postgres
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: labeling-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: labeling-postgres
+  template:
+    metadata:
+      labels:
+        app: labeling-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: labeling
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: LABELING_DB_PASSWORD
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "labeling"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30    # 5s x 30 = 150s max wait
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "labeling"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: labeling-postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: labeling-postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.labeling.postgres.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: labeling-postgres
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: labeling-postgres
+  ports:
+    - port: 5432
+---
+
+# ──────────────────────────────────────────────
+# Labeling Backend (FastAPI)
+# ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labeling-backend
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.labeling.backend.replicas }}
+  selector:
+    matchLabels:
+      app: labeling-backend
+  template:
+    metadata:
+      labels:
+        app: labeling-backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.labeling.backend.image }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: {{ .Values.labeling.backend.port }}
+          env:
+            - name: LABELING_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: LABELING_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://postgres:$(LABELING_DB_PASSWORD)@labeling-postgres:5432/labeling"
+            - name: MINIO_URL
+              value: "http://minio-service:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MINIO_BUCKET
+              value: {{ .Values.labeling.minioBucket }}
+            - name: REGISTRY_BUCKET
+              value: {{ .Values.labeling.registryBucket }}
+            - name: PARAMS_PATH
+              value: "/config/params.yaml"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: GITHUB_TOKEN
+            - name: GITHUB_REPO
+              value: {{ .Values.labeling.githubRepo | quote }}
+            - name: GITHUB_BRANCH
+              value: {{ .Values.labeling.githubBranch | default "main" | quote }}
+          volumeMounts:
+            - name: params
+              mountPath: /config/params.yaml
+              subPath: params.yaml
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.labeling.backend.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: params
+          configMap:
+            name: model-params
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: labeling-backend
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: labeling-backend
+  ports:
+    - port: {{ .Values.labeling.backend.port }}
+---
+
+# ──────────────────────────────────────────────
+# Labeling Frontend (Vue/Nginx)
+# ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labeling-frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.labeling.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: labeling-frontend
+  template:
+    metadata:
+      labels:
+        app: labeling-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: {{ .Values.labeling.frontend.image }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: labeling-frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: labeling-frontend
+  ports:
+    - port: {{ .Values.labeling.frontend.port }}
+      targetPort: 80
+
+{{- end }}

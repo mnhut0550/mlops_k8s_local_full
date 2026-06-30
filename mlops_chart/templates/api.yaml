@@ -1,0 +1,94 @@
+# k8s/api.yaml
+
+{{- if ((.Values.api).enabled) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: {{ .Values.namespace}}
+spec:
+  replicas: {{ .Values.api.replicas}}
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.api.image}}
+          imagePullPolicy: Never        # dùng image local, không pull từ registry
+          ports:
+            - containerPort:  {{ .Values.api.port}}
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MLFLOW_TRACKING_URI
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MLFLOW_S3_ENDPOINT_URL
+            - name: MODEL_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_NAME
+            - name: MODEL_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_VERSION
+            - name: GIT_PYTHON_REFRESH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: GIT_PYTHON_REFRESH
+            - name: PYTHONPATH
+              value: "/app/src:/app"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.port}}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          volumeMounts:
+            - name: model-code
+              mountPath: /app/src
+            - name: model-params
+              mountPath: /app/params.yaml
+              subPath: params.yaml
+      volumes:
+        - name: model-code
+          configMap:
+            name: model-code
+        - name: model-params
+          configMap:
+            name: model-params
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: {{ .Values.namespace}}
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - port: {{ .Values.api.port}}
+{{- end }}

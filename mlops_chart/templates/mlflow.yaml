@@ -1,0 +1,79 @@
+# k8s/mlflow.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: {{ .Values.namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: {{ .Values.mlflow.image}}
+          command:
+            - mlflow
+            - server
+            - --host=0.0.0.0
+            - --port={{ .Values.mlflow.port }}
+            - --backend-store-uri=sqlite:///mlflow/mlflow.db
+            - --default-artifact-root=s3://mlflow/artifacts
+          ports:
+            - containerPort: {{ .Values.mlflow.port }}
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MLFLOW_S3_ENDPOINT_URL
+          volumeMounts:
+            - name: mlflow-db
+              mountPath: /mlflow        # tạo thư mục /mlflow trong container
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.mlflow.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: mlflow-db
+          persistentVolumeClaim:
+            claimName: mlflow-pvc      # trỏ tới PVC bên dưới
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-pvc
+  namespace: {{ .Values.namespace}}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.mlflow.storage}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-service
+  namespace: {{ .Values.namespace}}
+spec:
+  type: ClusterIP
+  selector:
+    app: mlflow
+  ports:
+    - port: {{ .Values.mlflow.port }}
