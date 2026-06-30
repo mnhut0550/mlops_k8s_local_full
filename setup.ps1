@@ -1,4 +1,4 @@
-# setup.ps1
+﻿# setup.ps1
 # Run once when setting up a new project on Windows
 # Requirement:
 #   - GitHub repo đã tạo và remote đã kết nối (git remote set-url origin ...)
@@ -146,13 +146,13 @@ Write-Host ""
 Write-Host "[5/6] Waiting for services..." -ForegroundColor Yellow
 
 Write-Host "  Waiting for MinIO..."
-kubectl rollout status statefulset/minio -n mlops --timeout=120s
+kubectl rollout status statefulset/minio -n mlops --timeout=300s
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: MinIO rollout failed!" -ForegroundColor Red
     exit 1
 }
 
-kubectl wait pod -n mlops -l app=minio --for=condition=Ready --timeout=120s
+kubectl wait pod -n mlops -l app=minio --for=condition=Ready --timeout=300s
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: MinIO timeout!" -ForegroundColor Red
     exit 1

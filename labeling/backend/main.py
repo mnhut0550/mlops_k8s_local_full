@@ -629,26 +629,6 @@ def _now_ts() -> str:
     return now.strftime('%Y-%m-%dT%H:%M:%S.') + f"{now.microsecond:06d}Z"
 
 
-def _next_version(prefix: str) -> int:
-    """List objects với prefix trong registry bucket → trả về version tiếp theo."""
-    s3 = get_minio()
-    try:
-        resp     = s3.list_objects_v2(Bucket=REGISTRY_BUCKET, Prefix=prefix)
-        contents = resp.get("Contents", [])
-    except Exception:
-        return 1
-
-    versions = []
-    for obj in contents:
-        name = obj["Key"].split("/")[-1]   # vd: snapshot_v3.json
-        # lấy số giữa "_v" và ".json"
-        try:
-            v = int(name.split("_v")[-1].replace(".json", ""))
-            versions.append(v)
-        except ValueError:
-            pass
-
-    return max(versions) + 1 if versions else 1
 
 
 def _load_params() -> dict:
@@ -664,7 +644,7 @@ def _load_all_test_ids(s3) -> set:
     """Gom tất cả image_id đã nằm trong bất kỳ test set nào."""
     excluded = set()
     try:
-        resp = s3.list_objects_v2(Bucket=REGISTRY_BUCKET, Prefix="benchmarks/test_v")
+        resp = s3.list_objects_v2(Bucket=REGISTRY_BUCKET, Prefix="benchmarks/test_")
         for obj in resp.get("Contents", []):
             if not obj["Key"].endswith(".json"):
                 continue
@@ -687,18 +667,17 @@ def _put_json(s3, key: str, doc: dict):
 @app.post("/snapshots", status_code=201)
 def create_snapshot():
     """
-    Tạo 3 file cùng lúc cho version vX:
-      - snapshots/snapshot_vX.json
-      - benchmarks/test_vX.json
-      - datasets/dataset_vX.json
+    Tạo 3 file cùng lúc cho version yymmdd.hhmmss:
+      - snapshots/snapshot_<id>.json
+      - benchmarks/test_<id>.json
+      - datasets/dataset_<id>.json
 
-    test_vX = sample(all_snapshot - test_v1 - ... - test_v(X-1), test_ratio%)
-    dataset_vX = split(remaining, val_ratio, seed)
+    test_<id> = sample(all_snapshot - test_ids_cũ, test_ratio%)
+    dataset_<id> = split(remaining, val_ratio, seed)
     """
     # ── 1. Thời điểm snapshot ─────────────────────────────────
     ts          = _now_ts()
-    version     = _next_version("snapshots/snapshot_v")
-    snapshot_id = f"v{version}"
+    snapshot_id = datetime.now().strftime("%y%m%d.%H%M%S")
 
     # ── 2. Đọc params ─────────────────────────────────────────
     params     = _load_params()
@@ -813,7 +792,7 @@ def list_snapshots():
         except Exception:
             pass
 
-    snapshots.sort(key=lambda x: int(x["snapshot_id"][1:]))
+    snapshots.sort(key=lambda x: x["snapshot_id"])
     return {"snapshots": snapshots}
 
 
@@ -894,7 +873,7 @@ def start_train(body: TrainStartIn):
     """
     Trigger training:
     - snapshot_id=None  → tạo snapshot mới rồi train
-    - snapshot_id='v2'  → dùng snapshot có sẵn, chỉ push version
+    - snapshot_id='260630.194523'  → dùng snapshot có sẵn, chỉ push version
     """
     if body.snapshot_id:
         # Dùng snapshot có sẵn

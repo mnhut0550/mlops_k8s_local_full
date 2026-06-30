@@ -129,7 +129,7 @@ labeling:
 ```
 
 **Tạo GitHub Personal Access Token:**
-1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+1. GitHub → **Account Settings** (avatar góc trên phải) → Developer settings → Personal access tokens → Tokens (classic)
 2. Generate new token → chọn scope **`repo`** (full control)
 3. Copy token → điền vào `secret.githubToken`
 

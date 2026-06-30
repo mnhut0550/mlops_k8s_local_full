@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿﻿#!/usr/bin/env bash
 # setup.sh
 # Run once when setting up a new project on Linux/macOS
 # Requirement:
@@ -132,8 +132,8 @@ echo ""
 echo "[5/6] Waiting for services..."
 
 echo "  Waiting for MinIO..."
-kubectl rollout status statefulset/minio -n mlops --timeout=120s
-kubectl wait pod -n mlops -l app=minio --for=condition=Ready --timeout=120s
+kubectl rollout status statefulset/minio -n mlops --timeout=300s
+kubectl wait pod -n mlops -l app=minio --for=condition=Ready --timeout=300s
 
 echo "  Waiting for Labeling Postgres..."
 kubectl rollout status statefulset/labeling-postgres -n mlops --timeout=300s

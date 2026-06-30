@@ -28,4 +28,5 @@ COPY src/config/                ./src/config/
 ENV MLFLOW_TRACKING_URI=http://mlflow-service:5000
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "src/train.py", "--config", "/app/params.yaml"]
+ENTRYPOINT ["python", "src/train.py"]
+CMD ["--config", "/app/params.yaml"]
