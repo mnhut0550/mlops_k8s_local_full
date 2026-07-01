@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from PIL import Image
-from .models.models import PRETRAINED_BACKBONES as EMBEDDING_BACKBONES
+from models.models import PRETRAINED_BACKBONES as EMBEDDING_BACKBONES
 
 
 

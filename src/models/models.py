@@ -32,7 +32,7 @@ def build_model(name: str, num_classes: int, freeze_backbone: bool) -> nn.Module
         return model(num_classes= num_classes)
 
     # Pretrained backbones
-    if name not in PRETRAINED_BACKBONES or model is None:
+    if name not in PRETRAINED_BACKBONES:
         available = list(custom_model_list.keys()) + list(PRETRAINED_BACKBONES.keys())
 
         raise ValueError(
